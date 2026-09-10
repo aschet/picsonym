@@ -19,10 +19,11 @@ import pytest
 
 from picsonym.titling import (
     _SYSTEM_PROMPT_FROM_IMAGE,
+    _SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT,
     _SYSTEM_PROMPT_FROM_PROMPT,
     _TitleGenerator,
 )
-from tests.conftest import FakeBackend
+from tests.conftest import FakeBackend, make_comfyui_png_bytes
 
 
 def test_title_from_prompt_uses_the_prompt_system_prompt(
@@ -78,6 +79,38 @@ def test_title_from_image_accepts_raw_bytes_unchanged(
     assert call["image"] == b"pretend-image-bytes"
 
 
+def test_title_from_image_uses_its_own_embedded_comfyui_prompt(
+    fake_backend: FakeBackend, tmp_path: Path
+) -> None:
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(make_comfyui_png_bytes("a lone lighthouse at dusk"))
+    generator = _TitleGenerator(backend=fake_backend)
+
+    generator.title_from_image(image_path)
+
+    [call] = fake_backend.calls
+    assert call["system_prompt"] == _SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT
+    assert call["user_text"] == (
+        "Generation prompt: a lone lighthouse at dusk\n\nTitle this image."
+    )
+
+
+def test_title_from_image_prompt_argument_overrides_embedded_metadata(
+    fake_backend: FakeBackend, tmp_path: Path
+) -> None:
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(make_comfyui_png_bytes("embedded prompt"))
+    generator = _TitleGenerator(backend=fake_backend)
+
+    generator.title_from_image(image_path, prompt="explicit prompt")
+
+    [call] = fake_backend.calls
+    assert call["system_prompt"] == _SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT
+    assert call["user_text"] == (
+        "Generation prompt: explicit prompt\n\nTitle this image."
+    )
+
+
 def test_title_from_image_missing_file_raises(
     fake_backend: FakeBackend, tmp_path: Path
 ) -> None:
@@ -92,6 +125,35 @@ def test_response_is_stripped_of_quotes_and_extra_whitespace() -> None:
     generator = _TitleGenerator(backend=backend)
 
     assert generator.title_from_prompt("a scene") == "Quiet Morning"
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("quiet morning light", "Quiet Morning Light"),
+        ("QUIET MORNING LIGHT", "Quiet Morning Light"),
+        ("don't look back", "Don't Look Back"),
+    ],
+)
+def test_all_one_case_response_is_recovered_to_title_case(
+    content: str, expected: str
+) -> None:
+    """Not every model reliably follows the Title Case instruction."""
+    backend = FakeBackend(content=content)
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == expected
+
+
+def test_already_title_cased_response_with_lowercase_small_words_is_untouched() -> None:
+    """A model that already got real Title Case right (small words lowercase).
+
+    Must not be force-capitalized into a worse result.
+    """
+    backend = FakeBackend(content="Echoes of a Lost Era")
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == "Echoes of a Lost Era"
 
 
 @pytest.mark.parametrize("content", [None, "", "   "])

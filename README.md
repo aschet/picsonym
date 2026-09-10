@@ -49,6 +49,11 @@ generator = Picsonym(model="gemma4:e4b")
 generator.title_from_prompt("a lone lighthouse at dusk")
 generator.title_from_image("photo.jpg")
 
+# If photo.jpg carries its own embedded ComfyUI generation prompt, that's
+# used together with the image automatically. Pass one explicitly for any
+# other image (e.g. one whose prompt you keep elsewhere):
+generator.title_from_image("photo.jpg", prompt="a lone lighthouse at dusk")
+
 # Point at a different local model, or a real OpenAI-compatible cloud API
 # (set OPENAI_API_KEY for the latter):
 generator = Picsonym(model="gpt-5.1-mini", base_url="https://api.openai.com/v1")

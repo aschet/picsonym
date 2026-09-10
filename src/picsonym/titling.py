@@ -27,6 +27,7 @@ from .backends import (
     LLMBackend,
     OpenAIBackend,
 )
+from .comfyui import extract_prompt
 
 __all__: list[str] = []
 
@@ -36,41 +37,73 @@ __all__: list[str] = []
 # rather than silently accepting a garbled multi-title string.
 _MAX_TITLE_WORDS: Final = 8
 
-_SYSTEM_PROMPT_FROM_PROMPT: Final = """\
-You are an expert at titling artwork. You will be given a text prompt that \
-was used to generate an image. Read the prompt and invent a single \
-evocative, artistic title for the image it describes.
+_SYSTEM_PROMPT_TASK: Final = """\
+You are an expert at titling artwork. {intro}
 
-Focus on what the image is about: its mood, story, feeling, or situation. \
-Do not describe how the image was made — avoid mentioning style, medium, \
-technique, camera, lens, lighting, color palette, or artist names.
+Invent a mood, character, or narrative moment, as if titling a short \
+story — not merely what is shown or described. Do not describe how the \
+image was made (style, medium, technique, camera, lens, lighting, color \
+palette, artist names) or its visual texture and construction (torn, \
+fragmented, shattered, swirling, layered, collaged, abstract, composition \
+— in any form).
 
-Output exactly one title, 2 to 5 words, in Title Case, written as a phrase \
-(not a full sentence, no ending punctuation). Do not wrap it in quotation \
-marks. Output only the title itself, with no explanation, preamble, or \
-extra text.\
-"""
-
-_SYSTEM_PROMPT_FROM_IMAGE: Final = """\
-You are an expert at titling artwork. You will be shown an image. Look at \
-the image and invent a single evocative, artistic title for it.
-
-Focus on what the image is about: its mood, story, feeling, or situation. \
-Do not describe how the image was made — avoid mentioning style, medium, \
-technique, camera, lens, lighting, color palette, or artist names.
+Examples: for a runner crossing a finish line under stadium lights, a \
+good title is "The Long Approach" — it names the moment, not the scene. \
+For a chipped teacup on a sunlit windowsill, a good title is "Small Kept \
+Things" — it names what it means, not the object.
 
 Output exactly one title, 2 to 5 words, in Title Case, written as a phrase \
 (not a full sentence, no ending punctuation). Do not wrap it in quotation \
 marks. Output only the title itself, with no explanation, preamble, or \
 extra text.\
 """
+
+_SYSTEM_PROMPT_FROM_PROMPT: Final = _SYSTEM_PROMPT_TASK.format(
+    intro=(
+        "You will be given a text prompt that was used to generate an "
+        "image. Read the prompt and invent a single evocative, artistic "
+        "title for the image it describes."
+    )
+)
+
+_SYSTEM_PROMPT_FROM_IMAGE: Final = _SYSTEM_PROMPT_TASK.format(
+    intro=(
+        "You will be shown an image. Look at the image and invent a "
+        "single evocative, artistic title for it."
+    )
+)
+
+_SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT: Final = _SYSTEM_PROMPT_TASK.format(
+    intro=(
+        "You will be shown an image, together with the text prompt that "
+        "was used to generate it. Use both to invent a single evocative, "
+        "artistic title for it."
+    )
+)
 
 _IMAGE_USER_TEXT: Final = "Title this image."
+_IMAGE_WITH_PROMPT_USER_TEXT: Final = "Generation prompt: {prompt}\n\nTitle this image."
+
+
+def _title_case(text: str) -> str:
+    """Recover Title Case when a model ignores it (all lower- or upper-case).
+
+    Not every model reliably follows the "Title Case" instruction, and
+    failures are consistently all-one-case rather than a few wrong words.
+    A model that already attempted real Title Case — including correctly
+    lowercasing small words like "of"/"the" — is left untouched, since
+    force-capitalizing every word would make that output worse, not
+    better.
+    """
+    if text == text.lower() or text == text.upper():
+        return " ".join(word[:1].upper() + word[1:].lower() for word in text.split())
+    return text
 
 
 def _clean_title(text: str) -> str:
     text = text.strip().strip("\"'").strip()
-    return " ".join(text.split())
+    text = " ".join(text.split())
+    return _title_case(text)
 
 
 class _TitleGenerator:
@@ -163,10 +196,20 @@ class _TitleGenerator:
             system_prompt=_SYSTEM_PROMPT_FROM_PROMPT, user_text=prompt, image=None
         )
 
-    def title_from_image(self, image: str | os.PathLike[str] | bytes) -> str:
+    def title_from_image(
+        self, image: str | os.PathLike[str] | bytes, *, prompt: str | None = None
+    ) -> str:
         """Generate a title by looking at an image's content.
 
         :param image: Path to an image file, or raw image bytes.
+        :param prompt: The text prompt that generated the image, if
+            known. When omitted, this is extracted automatically from
+            the image's own embedded ComfyUI generation metadata, if
+            present. Either way, a known prompt is combined with the
+            image itself for a more meaningful title than the image
+            alone would give — the image keeps the title grounded in
+            what was actually rendered, in case the prompt is sparse or
+            wasn't followed faithfully.
         :returns: A clean, human-readable title — not yet filename-sanitized.
         :raises ValueError: if the backend cannot make sense of the image
             data (e.g. the default :class:`OpenAIBackend` requires a
@@ -177,8 +220,16 @@ class _TitleGenerator:
             a malformed (too many words) title.
         """
         data = image if isinstance(image, bytes) else Path(image).read_bytes()
+        if prompt is None:
+            prompt = extract_prompt(data)
+        if prompt is None:
+            return self._complete(
+                system_prompt=_SYSTEM_PROMPT_FROM_IMAGE,
+                user_text=_IMAGE_USER_TEXT,
+                image=data,
+            )
         return self._complete(
-            system_prompt=_SYSTEM_PROMPT_FROM_IMAGE,
-            user_text=_IMAGE_USER_TEXT,
+            system_prompt=_SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT,
+            user_text=_IMAGE_WITH_PROMPT_USER_TEXT.format(prompt=prompt),
             image=data,
         )

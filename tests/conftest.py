@@ -20,10 +20,32 @@ Neither ever makes a real network call or requires a running server.
 
 from __future__ import annotations
 
+import io
+import json
 from typing import Any, cast
 
 import openai
 import pytest
+from PIL import Image
+from PIL.PngImagePlugin import PngInfo
+
+
+def make_comfyui_png_bytes(*texts: str) -> bytes:
+    """Build a minimal PNG with a ComfyUI-style embedded ``prompt`` chunk.
+
+    Each of `texts` becomes one node's ``inputs.text`` field, mirroring
+    how ComfyUI embeds one node per graph step (e.g. a positive and a
+    negative prompt).
+    """
+    nodes = {
+        str(index): {"inputs": {"text": text}, "class_type": "CLIPTextEncode"}
+        for index, text in enumerate(texts)
+    }
+    info = PngInfo()
+    info.add_text("prompt", json.dumps(nodes))
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color="blue").save(buffer, format="PNG", pnginfo=info)
+    return buffer.getvalue()
 
 
 class FakeBackend:

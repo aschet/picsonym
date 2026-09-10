@@ -23,6 +23,7 @@ Basic usage::
 from __future__ import annotations
 
 from .backends import LLMBackend, OpenAIBackend
+from .comfyui import extract_prompt
 from .filenames import IMAGE_EXTENSIONS, sanitize_filename
 from .images import normalize_image
 from .renaming import Picsonym, RenameResult
@@ -34,6 +35,7 @@ __all__ = [
     "Picsonym",
     "RenameResult",
     "__version__",
+    "extract_prompt",
     "normalize_image",
     "sanitize_filename",
 ]
