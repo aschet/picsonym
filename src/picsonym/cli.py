@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import __version__
 from ._client import DEFAULT_BASE_URL
+from .backends import DEFAULT_TEMPERATURE
 from .renaming import Picsonym, RenameResult
 
 __all__ = ["main"]
@@ -29,6 +30,16 @@ def _common_parser() -> argparse.ArgumentParser:
         "--model",
         required=True,
         help="model name to use (must be vision-capable for --image/rename)",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_TEMPERATURE,
+        help=(
+            "sampling temperature (default: %(default)s) — the optimal "
+            "value varies by model, so tune it per model rather than "
+            "relying on the default"
+        ),
     )
     return parser
 
@@ -72,7 +83,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _run_title(args: argparse.Namespace) -> int:
-    picsonym = Picsonym(model=args.model, base_url=args.base_url)
+    picsonym = Picsonym(
+        model=args.model, base_url=args.base_url, temperature=args.temperature
+    )
     try:
         if args.prompt is not None:
             title = picsonym.title_from_prompt(args.prompt)
@@ -92,7 +105,9 @@ def _describe(result: RenameResult) -> str:
 
 
 def _run_rename(args: argparse.Namespace) -> int:
-    picsonym = Picsonym(model=args.model, base_url=args.base_url)
+    picsonym = Picsonym(
+        model=args.model, base_url=args.base_url, temperature=args.temperature
+    )
 
     def targets() -> Iterator[RenameResult]:
         for path in args.paths:

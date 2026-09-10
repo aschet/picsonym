@@ -12,6 +12,7 @@ from typing import Any, ClassVar
 import pytest
 from _pytest.capture import CaptureFixture
 
+from picsonym.backends import DEFAULT_TEMPERATURE
 from picsonym.cli import main
 from picsonym.renaming import RenameResult
 
@@ -122,7 +123,17 @@ def test_rename_forwards_flags_to_picsonym_and_constructor(tmp_path: Path) -> No
     assert FakePicsonym.last_init_kwargs == {
         "model": "my-model",
         "base_url": "http://example.invalid/v1",
+        "temperature": DEFAULT_TEMPERATURE,
     }
+
+
+def test_temperature_flag_is_forwarded(tmp_path: Path) -> None:
+    image = tmp_path / "IMG_1.png"
+    image.write_bytes(b"data")
+
+    main(["rename", "--model", "my-model", "--temperature", "1.1", str(image)])
+
+    assert FakePicsonym.last_init_kwargs["temperature"] == 1.1
 
 
 def test_version(capsys: CaptureFixture[str]) -> None:
