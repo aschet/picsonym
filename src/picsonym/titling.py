@@ -43,7 +43,11 @@ by describing it. {intro}
 
 Privately imagine a single line of interior thought or speech from \
 someone or something present in this moment — what they might be \
-thinking, or about to say. Compress that one line into the title.
+thinking, or about to say. Compress that one line into the title. The \
+title must point at something specific to this exact scene, not a \
+generic assertion that could describe almost any image — avoid opening \
+with "Everything is...", "Stillness before...", "One more...", or "The \
+[noun] remains".
 
 Do not describe how the image was made (style, medium, technique, \
 camera, lens, lighting, color palette, artist names) or its visual \
