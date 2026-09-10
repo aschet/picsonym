@@ -14,7 +14,7 @@ venv/
 env/
 
 # Local editor / agent settings
-.claude/settings.local.json
+.claude/
 
 # Tooling caches
 .pytest_cache/
