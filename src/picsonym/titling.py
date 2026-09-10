@@ -43,11 +43,7 @@ by describing it. {intro}
 
 Privately imagine a single line of interior thought or speech from \
 someone or something present in this moment — what they might be \
-thinking, or about to say. Compress that one line into the title. The \
-title must point at something specific to this exact scene, not a \
-generic assertion that could describe almost any image — avoid opening \
-with "Everything is...", "Stillness before...", "One more...", or "The \
-[noun] remains".
+thinking, or about to say. Compress that one line into the title.
 
 Do not describe how the image was made (style, medium, technique, \
 camera, lens, lighting, color palette, artist names) or its visual \
@@ -209,25 +205,38 @@ class _TitleGenerator:
             what was actually rendered, in case the prompt is sparse or
             wasn't followed faithfully.
         :returns: A clean, human-readable title — not yet filename-sanitized.
-        :raises ValueError: if the backend cannot make sense of the image
-            data (e.g. the default :class:`OpenAIBackend` requires a
-            format Pillow can decode).
         :raises FileNotFoundError: `image` is a path that does not exist.
         :raises TypeError: if the backend does not return a str.
         :raises RuntimeError: if the backend returns no usable content, or
             a malformed (too many words) title.
+        :raises Exception: whatever the backend raises when it cannot
+            handle the image (e.g. the default :class:`OpenAIBackend`
+            requires a format Pillow can decode; a non-vision model
+            raises its own API error) — unless a prompt is known (given,
+            or extracted from the image's own metadata), in which case
+            that failure is not raised: title generation falls back to
+            text-only, using the prompt alone.
         """
         data = image if isinstance(image, bytes) else Path(image).read_bytes()
         if prompt is None:
             prompt = extract_prompt(data)
-        if prompt is None:
-            return self._complete(
-                system_prompt=_SYSTEM_PROMPT_FROM_IMAGE,
-                user_text=_IMAGE_USER_TEXT,
-                image=data,
-            )
-        return self._complete(
-            system_prompt=_SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT,
-            user_text=_IMAGE_WITH_PROMPT_USER_TEXT.format(prompt=prompt),
-            image=data,
+        system_prompt = (
+            _SYSTEM_PROMPT_FROM_IMAGE
+            if prompt is None
+            else _SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT
         )
+        user_text = (
+            _IMAGE_USER_TEXT
+            if prompt is None
+            else _IMAGE_WITH_PROMPT_USER_TEXT.format(prompt=prompt)
+        )
+        try:
+            return self._complete(
+                system_prompt=system_prompt, user_text=user_text, image=data
+            )
+        except Exception:
+            if prompt is None:
+                raise
+            return self._complete(
+                system_prompt=_SYSTEM_PROMPT_FROM_PROMPT, user_text=prompt, image=None
+            )

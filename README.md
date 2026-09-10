@@ -54,6 +54,13 @@ generator.title_from_image("photo.jpg")
 # other image (e.g. one whose prompt you keep elsewhere):
 generator.title_from_image("photo.jpg", prompt="a lone lighthouse at dusk")
 
+# --model must be vision-capable. If it isn't and a prompt is known (given,
+# or extracted from the image), title_from_image falls back to text-only
+# generation instead of failing. This only helps if the backend actually
+# raises an error for the unsupported image — some non-vision models
+# silently answer without ever looking at it instead, which picsonym has
+# no portable way to detect across arbitrary OpenAI-compatible backends.
+
 # Point at a different local model, or a real OpenAI-compatible cloud API
 # (set OPENAI_API_KEY for the latter):
 generator = Picsonym(model="gpt-5.1-mini", base_url="https://api.openai.com/v1")

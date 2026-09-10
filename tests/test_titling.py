@@ -111,6 +111,55 @@ def test_title_from_image_prompt_argument_overrides_embedded_metadata(
     )
 
 
+class _VisionUnsupportedBackend:
+    """Raises whenever asked to handle an image, like a non-vision model."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def generate(
+        self, *, system_prompt: str, user_text: str, image: bytes | None
+    ) -> str:
+        self.calls.append(
+            {"system_prompt": system_prompt, "user_text": user_text, "image": image}
+        )
+        if image is not None:
+            raise RuntimeError("model does not support multimodal requests")
+        return "Quiet Morning Light"
+
+
+def test_title_from_image_falls_back_to_prompt_only_when_vision_fails(
+    tmp_path: Path,
+) -> None:
+    """Covers a non-vision model, or any other vision-call failure."""
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(make_comfyui_png_bytes("a lone lighthouse at dusk"))
+    backend = _VisionUnsupportedBackend()
+    generator = _TitleGenerator(backend=backend)
+
+    title = generator.title_from_image(image_path)
+
+    assert title == "Quiet Morning Light"
+    assert [call["image"] is not None for call in backend.calls] == [True, False]
+    assert backend.calls[1]["system_prompt"] == _SYSTEM_PROMPT_FROM_PROMPT
+    assert backend.calls[1]["user_text"] == "a lone lighthouse at dusk"
+
+
+def test_title_from_image_reraises_vision_failure_with_no_prompt_to_fall_back_on(
+    tmp_path: Path,
+) -> None:
+    """No embedded or given prompt means no fallback is possible."""
+    image_path = tmp_path / "photo.png"
+    image_path.write_bytes(b"plain bytes, no ComfyUI metadata")
+    backend = _VisionUnsupportedBackend()
+    generator = _TitleGenerator(backend=backend)
+
+    with pytest.raises(RuntimeError, match="does not support multimodal"):
+        generator.title_from_image(image_path)
+
+    assert len(backend.calls) == 1
+
+
 def test_title_from_image_missing_file_raises(
     fake_backend: FakeBackend, tmp_path: Path
 ) -> None:
