@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: 2026 Thomas Ascher <thomas.ascher@gmx.at>
+#
+# SPDX-License-Identifier: MIT
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "picsonym"
+dynamic = ["version"]
+description = "Evocative, artistic titles for images via an OpenAI-compatible LLM API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Thomas Ascher", email = "thomas.ascher@gmx.at" }]
+keywords = ["image", "filename", "rename", "title", "openai", "llm", "vision-language-model", "cli"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+dependencies = ["openai>=1.50", "pillow>=10"]
+
+[project.urls]
+Homepage = "https://github.com/aschet/picsonym"
+Documentation = "https://github.com/aschet/picsonym#readme"
+Source = "https://github.com/aschet/picsonym"
+Issues = "https://github.com/aschet/picsonym/issues"
+Changelog = "https://github.com/aschet/picsonym/releases"
+
+[project.scripts]
+picsonym = "picsonym.cli:main"
+
+[dependency-groups]
+dev = [
+    "build>=1.2",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "twine>=5.1",
+]
+
+[tool.hatch.version]
+path = "src/picsonym/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/picsonym"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "--doctest-modules --strict-markers --strict-config --import-mode=importlib"
+testpaths = ["tests", "src"]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D101", "D102", "D103", "D107"]
+
+[tool.ruff.format]
+exclude = ["*.md"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests"]
+strict = true
