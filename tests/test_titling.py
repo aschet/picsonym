@@ -156,13 +156,33 @@ def test_already_title_cased_response_with_lowercase_small_words_is_untouched() 
     assert generator.title_from_prompt("a scene") == "Echoes of a Lost Era"
 
 
-@pytest.mark.parametrize("content", [None, "", "   "])
+@pytest.mark.parametrize("content", [None, "", "   ", '""', "?"])
 def test_empty_response_raises_runtime_error(content: str | None) -> None:
+    """Covers both literally-empty output and output that cleans to empty.
+
+    E.g. only quote marks, or only punctuation.
+    """
     backend = FakeBackend(content=content)
     generator = _TitleGenerator(backend=backend)
 
     with pytest.raises(RuntimeError, match="no title content"):
         generator.title_from_prompt("a scene")
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("Who Is There?", "Who Is There"),
+        ("Wait for Me.", "Wait for Me"),
+        ("So Close Now!", "So Close Now"),
+    ],
+)
+def test_trailing_punctuation_is_stripped(content: str, expected: str) -> None:
+    """Not every model reliably follows the no-ending-punctuation instruction."""
+    backend = FakeBackend(content=content)
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == expected
 
 
 def test_non_str_response_raises_type_error() -> None:

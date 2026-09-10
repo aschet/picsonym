@@ -38,46 +38,39 @@ __all__: list[str] = []
 _MAX_TITLE_WORDS: Final = 8
 
 _SYSTEM_PROMPT_TASK: Final = """\
-You are an expert at titling artwork. {intro}
+You are titling artwork by writing it like a piece of flash fiction, not \
+by describing it. {intro}
 
-Invent a mood, character, or narrative moment, as if titling a short \
-story — not merely what is shown or described. Do not describe how the \
-image was made (style, medium, technique, camera, lens, lighting, color \
-palette, artist names) or its visual texture and construction (torn, \
-fragmented, shattered, swirling, layered, collaged, abstract, composition \
-— in any form).
+Privately imagine a single line of interior thought or speech from \
+someone or something present in this moment — what they might be \
+thinking, or about to say. Compress that one line into the title.
 
-Examples: for a runner crossing a finish line under stadium lights, a \
-good title is "The Long Approach" — it names the moment, not the scene. \
-For a chipped teacup on a sunlit windowsill, a good title is "Small Kept \
-Things" — it names what it means, not the object.
+Do not describe how the image was made (style, medium, technique, \
+camera, lens, lighting, color palette, artist names) or its visual \
+texture and construction (torn, fragmented, shattered, swirling, \
+layered, collaged, abstract, composition — in any form).
 
 Output exactly one title, 2 to 5 words, in Title Case, written as a phrase \
 (not a full sentence, no ending punctuation). Do not wrap it in quotation \
 marks. Output only the title itself, with no explanation, preamble, or \
-extra text.\
+extra text, and do not output the interior line itself.\
 """
 
 _SYSTEM_PROMPT_FROM_PROMPT: Final = _SYSTEM_PROMPT_TASK.format(
     intro=(
         "You will be given a text prompt that was used to generate an "
-        "image. Read the prompt and invent a single evocative, artistic "
-        "title for the image it describes."
+        "image. Read the prompt and imagine the scene it describes."
     )
 )
 
 _SYSTEM_PROMPT_FROM_IMAGE: Final = _SYSTEM_PROMPT_TASK.format(
-    intro=(
-        "You will be shown an image. Look at the image and invent a "
-        "single evocative, artistic title for it."
-    )
+    intro="You will be shown an image."
 )
 
 _SYSTEM_PROMPT_FROM_IMAGE_AND_PROMPT: Final = _SYSTEM_PROMPT_TASK.format(
     intro=(
         "You will be shown an image, together with the text prompt that "
-        "was used to generate it. Use both to invent a single evocative, "
-        "artistic title for it."
+        "was used to generate it. Use both to imagine the scene."
     )
 )
 
@@ -103,6 +96,7 @@ def _title_case(text: str) -> str:
 def _clean_title(text: str) -> str:
     text = text.strip().strip("\"'").strip()
     text = " ".join(text.split())
+    text = text.rstrip(".!?,;:")
     return _title_case(text)
 
 
@@ -172,9 +166,9 @@ class _TitleGenerator:
                 f"{backend_name}.generate() must return str, "
                 f"got {type(content).__name__}"
             )
-        if not content.strip():
-            raise RuntimeError("the backend returned no title content")
         title = _clean_title(content)
+        if not title:
+            raise RuntimeError("the backend returned no title content")
         if len(title.split()) > _MAX_TITLE_WORDS:
             raise RuntimeError(f"the backend returned a malformed title: {title!r}")
         return title
