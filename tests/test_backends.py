@@ -74,6 +74,18 @@ def test_reasoning_is_always_disabled(fake_client: FakeOpenAIClient) -> None:
     assert call["extra_body"] == {"reasoning_effort": "none"}
 
 
+def test_temperature_none_omits_the_parameter(fake_client: FakeOpenAIClient) -> None:
+    """None means "use the backend's own default", not "send 0.0"."""
+    backend = OpenAIBackend(
+        client=as_client(fake_client), model="test-model", temperature=None
+    )
+
+    backend.generate(system_prompt="s", user_text="u", image=None)
+
+    [call] = fake_client.completions.calls
+    assert "temperature" not in call
+
+
 @pytest.mark.parametrize("content", [None, ""])
 def test_no_content_returns_empty_string(content: str | None) -> None:
     fake_client = FakeOpenAIClient(content=content)

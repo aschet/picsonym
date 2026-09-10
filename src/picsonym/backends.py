@@ -30,7 +30,9 @@ __all__ = [
     "OpenAIBackend",
 ]
 
-DEFAULT_TEMPERATURE: Final = 0.9
+# None omits the field from the request entirely, rather than sending
+# 0.0, falling back to each model's own default.
+DEFAULT_TEMPERATURE: Final = None
 DEFAULT_MAX_OUTPUT_TOKENS: Final = 20
 
 # Reasoning is always off: it can burn the whole max_output_tokens budget
@@ -79,7 +81,7 @@ class OpenAIBackend:
         base_url: str = DEFAULT_BASE_URL,
         client: openai.OpenAI | None = None,
         model: str,
-        temperature: float = DEFAULT_TEMPERATURE,
+        temperature: float | None = DEFAULT_TEMPERATURE,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
     ) -> None:
         """Construct a backend against an OpenAI-compatible API.
@@ -98,13 +100,17 @@ class OpenAIBackend:
             one would fail confusingly at API-call time instead of clearly
             at construction time.
         :param temperature: Sampling temperature passed to the API.
+            Defaults to `None`, which omits the field entirely so the
+            backend falls back to its own default (e.g. a model's own
+            default temperature on Ollama) — see :data:`DEFAULT_TEMPERATURE`.
+            Pass an explicit float to override.
         :param max_output_tokens: Maximum tokens the API may generate;
             titles are short, so the default is deliberately small.
         :raises openai.OpenAIError: see :func:`picsonym._client.build_client`.
         """
         self._client = build_client(api_key=api_key, base_url=base_url, client=client)
         self._model = model
-        self._temperature = temperature
+        self._temperature: float | None = temperature
         self._max_output_tokens = max_output_tokens
 
     def generate(
@@ -134,15 +140,36 @@ class OpenAIBackend:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
         ]
-        completion = self._client.chat.completions.create(
-            model=self._model,
-            temperature=self._temperature,
-            max_tokens=self._max_output_tokens,
-            messages=messages,  # type: ignore[arg-type]
-            extra_body=_REASONING_DISABLED_BODY,
-        )
+        completion = self._create_completion(messages)
         if not completion.choices:
             raise RuntimeError(
                 f"the API response for model {self._model!r} contained no choices"
             )
         return completion.choices[0].message.content or ""
+
+    def _create_completion(
+        self, messages: list[dict[str, object]]
+    ) -> openai.types.chat.ChatCompletion:
+        """Call the chat completions API.
+
+        Split out from :meth:`generate` as a seam for subclasses that need
+        to pass extra, provider-specific request fields (e.g. OpenAI's own
+        `response_format`, or Ollama's grammar-constrained `format` via
+        `extra_body`) — override this to adjust the call while still
+        reusing `generate`'s message/image handling.
+        """
+        extra_body: dict[str, object] = dict(_REASONING_DISABLED_BODY)
+        if self._temperature is None:
+            return self._client.chat.completions.create(
+                model=self._model,
+                max_tokens=self._max_output_tokens,
+                messages=messages,  # type: ignore[arg-type]
+                extra_body=extra_body,
+            )
+        return self._client.chat.completions.create(
+            model=self._model,
+            temperature=self._temperature,
+            max_tokens=self._max_output_tokens,
+            messages=messages,  # type: ignore[arg-type]
+            extra_body=extra_body,
+        )

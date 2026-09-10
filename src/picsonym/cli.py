@@ -36,9 +36,7 @@ def _common_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_TEMPERATURE,
         help=(
-            "sampling temperature (default: %(default)s) — the optimal "
-            "value varies by model, so tune it per model rather than "
-            "relying on the default"
+            "sampling temperature; omitted by default so the model uses its own default"
         ),
     )
     return parser
