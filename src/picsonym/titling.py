@@ -15,6 +15,7 @@ either require network access or a local server at import/test time.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Final
 
@@ -37,6 +38,29 @@ __all__: list[str] = []
 # rather than silently accepting a garbled multi-title string.
 _MAX_TITLE_WORDS: Final = 8
 
+# Longer/more specific markers first, so "**...**"/"<<...>>" are stripped
+# whole rather than leaving a single "*"/"<" behind from a shorter match.
+_WRAPPER_PAIRS: Final = [
+    ("**", "**"),
+    ("<<", ">>"),
+    ("```", "```"),
+    ("`", "`"),
+    ("*", "*"),
+    ("<", ">"),
+]
+_HEADING_MARKER_RE: Final = re.compile(r"^#+\s*")
+_REASONING_LEAK_RE: Final = re.compile(r"</think>\s*", re.IGNORECASE)
+
+# What a cleaned title may consist of: letters, spaces, and the
+# punctuation an ordinary title phrase legitimately uses -- including a
+# curly apostrophe, which some models prefer over a straight one.
+# Sticking to filename-safe characters here keeps titles clean ahead of
+# sanitize_filename too. A run of anything else (markdown, stray
+# symbols, a leaked newline) is replaced with a space rather than
+# rejected, since it is the backend decorating its answer, not a reason
+# to fail the whole title.
+_DISALLOWED_CHARS_RE: Final = re.compile("[^A-Za-z'\u2019,\\- ]+")
+
 _SYSTEM_PROMPT_TASK: Final = """\
 You are titling artwork by writing it like a piece of flash fiction, not \
 by describing it. {intro}
@@ -52,8 +76,9 @@ layered, collaged, abstract, composition — in any form).
 
 Output exactly one title, 2 to 5 words, in Title Case, written as a phrase \
 (not a full sentence, no ending punctuation). Do not wrap it in quotation \
-marks. Output only the title itself, with no explanation, preamble, or \
-extra text, and do not output the interior line itself.\
+marks or use any markdown formatting (no headers, bold, backticks, or \
+brackets). Output only the title itself, with no explanation, preamble, \
+or extra text, and do not output the interior line itself.\
 """
 
 _SYSTEM_PROMPT_FROM_PROMPT: Final = _SYSTEM_PROMPT_TASK.format(
@@ -93,10 +118,32 @@ def _title_case(text: str) -> str:
     return text
 
 
+def _strip_reasoning_leak(text: str) -> str:
+    """Keep only what follows a leaked closing "</think>" tag, if any."""
+    parts = _REASONING_LEAK_RE.split(text)
+    return parts[-1].strip() if len(parts) > 1 else text.strip()
+
+
+def _strip_wrapping(text: str) -> str:
+    """Unwrap a single layer of decorative markdown/heading wrapping."""
+    text = _HEADING_MARKER_RE.sub("", text).strip()
+    for prefix, suffix in _WRAPPER_PAIRS:
+        if (
+            len(text) > len(prefix) + len(suffix)
+            and text.startswith(prefix)
+            and text.endswith(suffix)
+        ):
+            return text[len(prefix) : -len(suffix)].strip()
+    return text
+
+
 def _clean_title(text: str) -> str:
     text = text.strip().strip("\"'").strip()
     text = " ".join(text.split())
-    text = text.rstrip(".!?,;:")
+    text = _strip_reasoning_leak(text)
+    text = _strip_wrapping(text)
+    text = _DISALLOWED_CHARS_RE.sub(" ", text)
+    text = " ".join(text.split()).rstrip(", ")
     return _title_case(text)
 
 
@@ -110,7 +157,7 @@ class _TitleGenerator:
         base_url: str = DEFAULT_BASE_URL,
         client: openai.OpenAI | None = None,
         model: str | None = None,
-        temperature: float = DEFAULT_TEMPERATURE,
+        temperature: float | None = DEFAULT_TEMPERATURE,
         max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS,
         backend: LLMBackend | None = None,
     ) -> None:
@@ -133,8 +180,10 @@ class _TitleGenerator:
         :param max_output_tokens: Forwarded to the default
             :class:`OpenAIBackend`. Ignored if `backend` is given.
         :param backend: A custom :class:`LLMBackend` — e.g. one running a
-            model already loaded in-process, with no HTTP call involved.
-            When given, `api_key`/`base_url`/`client`/`model`/`temperature`/
+            model already loaded in-process, with no HTTP call involved,
+            or one implementing structured/grammar-constrained output
+            against a specific provider's own API. When given,
+            `api_key`/`base_url`/`client`/`model`/`temperature`/
             `max_output_tokens` are all ignored, since the backend already
             encapsulates how (and against what model) it generates text.
         :raises ValueError: if `backend` is not given and `model` is None.

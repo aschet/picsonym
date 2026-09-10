@@ -234,6 +234,62 @@ def test_trailing_punctuation_is_stripped(content: str, expected: str) -> None:
     assert generator.title_from_prompt("a scene") == expected
 
 
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("**Cosmic Ink Counts**", "Cosmic Ink Counts"),
+        ("*Steel Spines Whisper*", "Steel Spines Whisper"),
+        ("## Quiet Garden Moment", "Quiet Garden Moment"),
+        ("<<Rainy Street Whisper>>", "Rainy Street Whisper"),
+        ("`I Rewire`", "I Rewire"),
+        ("```The Long Approach```", "The Long Approach"),
+    ],
+)
+def test_decorative_wrapping_is_stripped(content: str, expected: str) -> None:
+    """Markdown/heading decoration a model wraps the title in is unwrapped.
+
+    The same way surrounding quote marks already are.
+    """
+    backend = FakeBackend(content=content)
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == expected
+
+
+def test_reasoning_leak_is_stripped() -> None:
+    """A leaked reasoning block keeps only what follows the closing tag."""
+    leaked = "Welcome To The Spaceport\n</think>\n\nThe Long Approach"
+    backend = FakeBackend(content=leaked)
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == "The Long Approach"
+
+
+_CURLY_APOSTROPHE_TITLE = "Golden Hour’s Whisper"  # noqa: RUF001 - testing this char
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (_CURLY_APOSTROPHE_TITLE, _CURLY_APOSTROPHE_TITLE),
+        ("Why Did You Bring Me Here?", "Why Did You Bring Me Here"),
+        ("I Rewire ```", "I Rewire"),
+        ("Concrete Aspiration\n;", "Concrete Aspiration"),
+    ],
+)
+def test_stray_disallowed_characters_are_replaced_not_rejected(
+    content: str, expected: str
+) -> None:
+    """Cleanup, never a raised error, for a leftover stray symbol.
+
+    A curly apostrophe is a legitimate character, not stray.
+    """
+    backend = FakeBackend(content=content)
+    generator = _TitleGenerator(backend=backend)
+
+    assert generator.title_from_prompt("a scene") == expected
+
+
 def test_non_str_response_raises_type_error() -> None:
     """A buggy backend returning e.g. a list must fail clearly.
 
