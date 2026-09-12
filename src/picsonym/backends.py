@@ -154,18 +154,45 @@ class OpenAIBackend:
         `response_format`, or Ollama's grammar-constrained `format` via
         `extra_body`) — override this to adjust the call while still
         reusing `generate`'s message/image handling.
+
+        :raises openai.BadRequestError: propagated if the request is
+            rejected for a reason unrelated to `reasoning_effort` — see
+            `_disable_reasoning`.
         """
-        if self._temperature is None:
+        kwargs: dict[str, object] = {
+            "model": self._model,
+            "max_tokens": self._max_output_tokens,
+            "messages": messages,
+        }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        return self._disable_reasoning(kwargs)
+
+    def _disable_reasoning(
+        self, kwargs: dict[str, object]
+    ) -> openai.types.chat.ChatCompletion:
+        """Call the API with reasoning off, retrying without it if rejected.
+
+        Reasoning is requested off by default: it can burn the whole
+        `max_output_tokens` budget on hidden chain-of-thought before
+        emitting any visible title (empty content, `finish_reason`
+        "length"), adding tens of seconds for no benefit on a task this
+        short. Not every reasoning-capable model supports this override
+        though — some (e.g. OpenAI's `gpt-6-astra`) reject the request
+        outright rather than ignoring it. That specific failure (the
+        error's `param` is `"reasoning_effort"`) is retried once without
+        it rather than surfaced as a crash; any other failure (bad model
+        name, bad image, an unrelated bad request, ...) is not caught and
+        propagates normally.
+
+        :raises openai.BadRequestError: propagated if the request is
+            rejected for a reason unrelated to `reasoning_effort`.
+        """
+        try:
             return self._client.chat.completions.create(  # type: ignore[call-overload,no-any-return]
-                model=self._model,
-                max_tokens=self._max_output_tokens,
-                messages=messages,
-                reasoning_effort="none",
+                reasoning_effort="none", **kwargs
             )
-        return self._client.chat.completions.create(  # type: ignore[call-overload,no-any-return]
-            model=self._model,
-            temperature=self._temperature,
-            max_tokens=self._max_output_tokens,
-            messages=messages,
-            reasoning_effort="none",
-        )
+        except openai.BadRequestError as exc:
+            if exc.param != "reasoning_effort":
+                raise
+            return self._client.chat.completions.create(**kwargs)  # type: ignore[call-overload,no-any-return]

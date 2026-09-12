@@ -9,13 +9,14 @@ from __future__ import annotations
 import base64
 import io
 
+import openai
 import pytest
 from PIL import Image
 
 from picsonym._client import DEFAULT_BASE_URL, build_client
 from picsonym.backends import OpenAIBackend
 from picsonym.images import normalize_image
-from tests.conftest import FakeOpenAIClient, as_client
+from tests.conftest import FakeOpenAIClient, as_client, make_bad_request_error
 
 
 def _make_image_bytes(size: tuple[int, int], fmt: str) -> bytes:
@@ -72,6 +73,35 @@ def test_reasoning_is_always_disabled(fake_client: FakeOpenAIClient) -> None:
 
     [call] = fake_client.completions.calls
     assert call["reasoning_effort"] == "none"
+
+
+def test_retries_without_reasoning_effort_if_the_model_rejects_it(
+    fake_client: FakeOpenAIClient,
+) -> None:
+    """Some models (e.g. OpenAI's gpt-6-astra) error instead of ignoring it."""
+    fake_client.completions.error = make_bad_request_error(param="reasoning_effort")
+    backend = OpenAIBackend(client=as_client(fake_client), model="test-model")
+
+    result = backend.generate(system_prompt="s", user_text="u", image=None)
+
+    assert result == "Quiet Morning Light"
+    first_call, retry_call = fake_client.completions.calls
+    assert first_call["reasoning_effort"] == "none"
+    assert "reasoning_effort" not in retry_call
+
+
+def test_an_unrelated_bad_request_is_not_retried(
+    fake_client: FakeOpenAIClient,
+) -> None:
+    error = make_bad_request_error(param="model")
+    fake_client.completions.error = error
+    backend = OpenAIBackend(client=as_client(fake_client), model="test-model")
+
+    with pytest.raises(openai.BadRequestError) as exc_info:
+        backend.generate(system_prompt="s", user_text="u", image=None)
+
+    assert exc_info.value is error
+    assert len(fake_client.completions.calls) == 1
 
 
 def test_temperature_none_omits_the_parameter(fake_client: FakeOpenAIClient) -> None:

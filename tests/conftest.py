@@ -24,10 +24,21 @@ import io
 import json
 from typing import Any, cast
 
+import httpx2
 import openai
 import pytest
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
+
+
+def make_bad_request_error(*, param: str | None) -> openai.BadRequestError:
+    """Build a real `BadRequestError` with a given `.param`, like the API sends."""
+    response = httpx2.Response(
+        status_code=400, request=httpx2.Request("POST", "http://test")
+    )
+    return openai.BadRequestError(
+        "bad request", response=response, body={"param": param}
+    )
 
 
 def make_comfyui_png_bytes(*texts: str) -> bytes:
@@ -96,7 +107,8 @@ class FakeCompletions:
     def create(self, **kwargs: Any) -> FakeCompletion:
         self.calls.append(kwargs)
         if self.error is not None:
-            raise self.error
+            error, self.error = self.error, None
+            raise error
         return FakeCompletion(self.content, empty_choices=self.empty_choices)
 
 
