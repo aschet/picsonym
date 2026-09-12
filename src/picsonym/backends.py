@@ -38,10 +38,7 @@ DEFAULT_MAX_OUTPUT_TOKENS: Final = 20
 # Reasoning is always off: it can burn the whole max_output_tokens budget
 # on hidden chain-of-thought before emitting any visible title (empty
 # content, finish_reason "length"), adding tens of seconds for no benefit
-# on a task this short. Sent via extra_body since the SDK's own
-# reasoning_effort has no "none" value and Ollama's native "think": false
-# is ignored on this endpoint (confirmed empirically).
-_REASONING_DISABLED_BODY: Final = {"reasoning_effort": "none"}
+# on a task this short.
 
 
 class LLMBackend(Protocol):
@@ -158,18 +155,17 @@ class OpenAIBackend:
         `extra_body`) — override this to adjust the call while still
         reusing `generate`'s message/image handling.
         """
-        extra_body: dict[str, object] = dict(_REASONING_DISABLED_BODY)
         if self._temperature is None:
-            return self._client.chat.completions.create(
+            return self._client.chat.completions.create(  # type: ignore[call-overload,no-any-return]
                 model=self._model,
                 max_tokens=self._max_output_tokens,
-                messages=messages,  # type: ignore[arg-type]
-                extra_body=extra_body,
+                messages=messages,
+                reasoning_effort="none",
             )
-        return self._client.chat.completions.create(
+        return self._client.chat.completions.create(  # type: ignore[call-overload,no-any-return]
             model=self._model,
             temperature=self._temperature,
             max_tokens=self._max_output_tokens,
-            messages=messages,  # type: ignore[arg-type]
-            extra_body=extra_body,
+            messages=messages,
+            reasoning_effort="none",
         )

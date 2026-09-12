@@ -71,7 +71,7 @@ def test_reasoning_is_always_disabled(fake_client: FakeOpenAIClient) -> None:
     backend.generate(system_prompt="s", user_text="u", image=None)
 
     [call] = fake_client.completions.calls
-    assert call["extra_body"] == {"reasoning_effort": "none"}
+    assert call["reasoning_effort"] == "none"
 
 
 def test_temperature_none_omits_the_parameter(fake_client: FakeOpenAIClient) -> None:
